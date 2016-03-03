@@ -6,6 +6,7 @@ var app = express();
 app.use(bodyParser.urlencoded({
     extended: true
 }));
+
 app.use(bodyParser.json());
 
 var parser = bodyParser.urlencoded({
@@ -14,9 +15,10 @@ var parser = bodyParser.urlencoded({
 
 var mysql      = require('mysql');
 var connection = mysql.createConnection({
-    host     : 'localhost',
-    user : 'root',
-    database: "test"
+    host     : 'styleru.net',
+    user : 'hungry',
+    database: "hungry",
+    password: "C5tyVKTD"
 });
 
 connection.connect();
@@ -41,8 +43,8 @@ app.put('/api/sendMail', parser,  function (req, res) {
     var transporter = nodemailer.createTransport({
         service: 'Gmail',
         auth: {
-            user: 'mmbabaev@gmail.com',
-            pass: 'your password'
+            user: 'i.hungry.info@gmail.com',
+            pass: 'asdfasdf11'
         }
     }, {
         // sender info
@@ -58,7 +60,9 @@ app.put('/api/sendMail', parser,  function (req, res) {
 
     transporter.sendMail(message, function(errorTransporter, info){
         error = {error: "Код подтверждения не был отправлен, попробуйте позже."};
-        if(errorTransporter){
+        if (errorTransporter) {
+            console.log("Error transporter");
+            res.json(error);
             return;
         }
         console.log('Message sent: ' + info.response);
@@ -91,7 +95,7 @@ app.put('/api/activate', parser, function(req, res) {
         }
         else {
             if (result.rowsAffected == 0) {
-                res.json({error: "Неправильная комбинация почта-код!"});
+                res.json({error: "Неправильная почта или код!"});
             }
             else {
                 res.json({status: "success"});
