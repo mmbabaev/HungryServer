@@ -14,11 +14,13 @@ var parser = bodyParser.urlencoded({
 });
 
 var mysql      = require('mysql');
+
 var connection = mysql.createConnection({
-    host     : 'styleru.net',
-    user : 'hungry',
-    database: "hungry",
-    password: "C5tyVKTD"
+    host     : 'localhost',
+    //port: 1337,
+    user : 'root',
+    database: "test",
+    charset: "utf8"
 });
 
 connection.connect();
@@ -27,85 +29,105 @@ app.listen(1337, function() {
     console.log('Express server listening on port 1337');
 });
 
+
 app.put('/api/sendMail', parser,  function (req, res) {
+    console.log("sendMail start");
 
     var mail = req.body.mail;
 
-    var firstTime = true;
     connection.query("Select * from users where email='" + mail + "'", function(err, result) {
-        if (result.length != 0) {
-            firstTime = false;
-        }
-    });
 
-    var nodemailer = require('nodemailer');
-
-    var transporter = nodemailer.createTransport({
-        service: 'Gmail',
-        auth: {
-            user: 'i.hungry.info@gmail.com',
-            pass: 'asdfasdf11'
-        }
-    }, {
-        // sender info
-        from: 'iHungry support <mmbabaev@gmail.com>'
-    });
-
-    var code = Math.floor(Math.random() * 8999) + 1000;
-    var message = {
-        to: req.body.mail,
-        subject: 'Регистрация в iHungry',
-        text: 'Ваш код подтверждения: ' + code
-    };
-
-    transporter.sendMail(message, function(errorTransporter, info){
-        error = {error: "Код подтверждения не был отправлен, попробуйте позже."};
-        if (errorTransporter) {
-            console.log("Error transporter");
-            res.json(error);
-            return;
-        }
-        console.log('Message sent: ' + info.response);
-        if (firstTime) {
+        if (result.length == 0) {
             request = "insert into users (code, email) values (?, ?)"
         }
         else {
-            request = "update users set code=? where email=?"
+            if (result[0]["code"] == "0") {
+                error = { error: "Такой  e-mail уже зарегистрирован!" };
+                console.log(error);
+                res.json(error);
+                return;
+            }
+            else {
+                request = "update users set code=? where email=?"
+            }
         }
-        connection.query(request,
-            [code, mail],
-            function(errorDB, result) {
-                if (!errorDB) res.json({status: "OK", text: "Код был отправлен на адрес " + mail + "."});
-                else res.json(error);
-            })
+
+        var nodemailer = require('nodemailer');
+
+        var transporter = nodemailer.createTransport({
+            service: 'Gmail',
+            auth: {
+                user: 'i.hungry.info@gmail.com',
+                pass: 'asdfasdf11'
+            }
+        }, {
+            // sender info
+            from: 'iHungry support <i.hungry.info@gmail.com>'
+        });
+
+        var code = Math.floor(Math.random() * 8999) + 1000;
+        console.log("Code: " + code);
+
+        var message = {
+            to: req.body.mail,
+            subject: 'Регистрация в iHungry',
+            text: 'Ваш код подтверждения: ' + code
+        };
+
+        transporter.sendMail(message, function(errorTransporter, info){
+            error = {error: "Код подтверждения не был отправлен, попробуйте позже."};
+            if (errorTransporter) {
+                console.log("Error transporter");
+                res.json(error);
+                return;
+            }
+            console.log('Message sent: ' + info.response);
+
+            connection.query(request,
+                [code, mail],
+                function(errorDB, result) {
+                    console.log(result);
+                    if (!errorDB) {
+                        res.json({status: "OK", text: "Код был отправлен на адрес " + mail + "."});
+                    }
+                    else {
+                        res.json(error);
+                    }
+                })
+        });
     });
 });
 
-app.put('/api/activate', parser, function(req, res) {
+app.get('/api/checkCode', parser, function(req, res) {
     console.log(req.url);
-    mail = req.body.mail;
-    code = req.body.code;
-    password = req.body.password;
+    mail = req.query.mail;
+    code = req.query.code;
+    console.log(mail);
+    console.log(code);
 
-    request = "update users set code=0, pass=? where email=? and code=?";
-    connection.query(request, [password, mail, code], function(err, result) {
+    request = "select * from users where email='" + mail + "' and code=" + code;
+    console.log(request);
+    connection.query(request, function(err, result) {
         if (err) {
             console.log("Database error: " + err);
-            res.json({error: "Ошибка на сервере"});
+            res.json({error: "Ошибка проверки кода"});
+        }
+
+        if (result.length == 0) {
+            er = { error: "Неправильный код!" };
+            console.log(er);
+            console.log(result);
+            res.json(er);
         }
         else {
-            if (result.rowsAffected == 0) {
-                res.json({error: "Неправильная почта или код!"});
-            }
-            else {
-                res.json({status: "success"});
-            }
+            console.log(result);
+            res.json({status: "success"});
         }
-    })
+    });
 });
 
 app.put('/api/registration', parser, function(req, res) {
-    email = req.body.email;
+    email = req.body.mail;
     surname = req.body.surname;
     name = req.body.name;
     gender = req.body.gender;
@@ -116,21 +138,55 @@ app.put('/api/registration', parser, function(req, res) {
     fac_id = req.body.fac_id;
     pass = req.body.pass;
 
+    // todo: загружать фото и сохранять url
+
     request = "update users set surname=?, name=?, gender=?," +
-        "phone=?, vk=?, dorm_id=?, flat=?, fac_id=?, pass=? where email=?";
+        "phone=?, vk=?, dorm_id=?, flat=?, fac_id=?, pass=?, code=0 where email=? AND pass IS NULL";
     params = [surname, name, gender, phone,
         vk, dorm_id, flat, fac_id, pass, email];
 
     connection.query(request, params, function(err, result) {
-        if (err) {
-            errorText = "Ошибка при регистрации нового пользователя"
+
+        // todo: ошибка такой email уже существует
+        if (err || result.affectedRows == 0) {
+            errorText = "Ошибка при регистрации нового пользователя";
+            console.log(result);
+            console.log(request);
             console.log(errorText + "\n" + err);
             res.json({error: errorText});
         }
         else {
-            t = "Новый пользователь зарегестрирован";
-            console.log(t);
-            res.json({status: "success", text: t});
+            var message = "Новый пользователь зарегестрирован";
+            console.log(message);
+            res.json({status: "success", text: message});
+        }
+    })
+
+
+});
+
+app.get('/api/login', parser, function(req, res) {
+    mail = req.query.mail;
+    password = req.query.password;
+
+    connection.query("select * from users where email=? AND pass=?", [mail, password], function(err, result) {
+        if (err) {
+            error = { error: "Ошибка входа" };
+            console.log(err);
+            res.json(error)
+        }
+        else {
+            if (result.length > 0) {
+                console.log(mail + " login");
+
+                res.json({ status: "success", id: result[0]["user_id"] });
+            }
+            else {
+                // todo: различать когда неверный логин, а когда пароль ??
+                error = { error: "Неверный логин или пароль!" };
+                console.log(error);
+                res.json(error);
+            }
         }
     })
 });
